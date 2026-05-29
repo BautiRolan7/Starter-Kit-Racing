@@ -14,6 +14,11 @@ const PORT = process.env.PORT || 3000;
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname, '..'))); // Servir el repositorio 3D
 
+// Redirigir la raíz a index.html para que no salga "Not Found"
+app.get('/', (req, res) => {
+  res.redirect('/index.html');
+});
+
 // Store rooms and their hosts
 const rooms = {}; // roomCode -> hostSocketId
 const roomPlayerCounts = {}; // roomCode -> player count
