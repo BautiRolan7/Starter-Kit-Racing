@@ -1,4 +1,4 @@
-const socket = io();
+const socket = io({ transports: ['websocket'] });
 
 function log(msg) {
     const el = document.getElementById('debugLog');

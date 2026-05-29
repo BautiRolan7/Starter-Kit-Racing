@@ -179,7 +179,7 @@
 				};
 				hostLog('Iniciando Socket.io host...');
 
-				window.socket = io();
+				window.socket = io({ transports: ['websocket'] });
 				window.socket.on('connect', () => {
 					hostLog('Conectado al servidor. Emitiendo createRoom...');
 					window.socket.emit('createRoom');
