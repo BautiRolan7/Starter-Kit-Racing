@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Juego Host - Pantalla Principal</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="host-body">
+    <div class="header">
+        <h1>JACKBOX PROTOTYPE</h1>
+        <div class="room-info">
+            <span>CÓDIGO DE SALA:</span>
+            <span id="roomCodeDisplay" class="room-code">----</span>
+        </div>
+        <div class="qr-container" id="qrContainer" style="display: none;">
+            <img id="qrCodeImage" src="" alt="QR Code" />
+        </div>
+        <p>Escanea el QR o entra desde tu celular e ingresa el código.</p>
+    </div>
+
+    <!-- Arena del juego -->
+    <div id="gameArena" class="game-arena">
+        <!-- Los jugadores aparecerán aquí -->
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="host.js"></script>
+</body>
+</html>

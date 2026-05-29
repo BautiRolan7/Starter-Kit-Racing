@@ -5,8 +5,27 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 	<title>Racing</title>
 	<style>
-		body { margin: 0; overflow: hidden; background: #000; }
+		body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
 		canvas { display: block; touch-action: none; }
+		#qr-overlay {
+			position: absolute; top: 40px; left: 50%; transform: translateX(-50%);
+			background: rgba(0,0,0,0.8); color: white; padding: 20px; border-radius: 12px;
+			display: none; flex-direction: column; align-items: center; z-index: 100;
+			backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2);
+		}
+		#qr-toggle-btn {
+			position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 101;
+			background: rgba(0,0,0,0.7); color: white; border: 1px solid rgba(255,255,255,0.2); border-top: none;
+			padding: 8px 16px; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;
+			cursor: pointer; display: none; font-weight: bold; backdrop-filter: blur(5px);
+		}
+		#qr-overlay h2 { margin: 0 0 10px 0; font-size: 24px; color: #fbbf24; }
+		#qr-img { width: 150px; height: 150px; background: white; padding: 10px; border-radius: 8px; }
+		.players-list {
+			position: absolute; top: 20px; right: 20px; color: white; z-index: 100;
+			display: flex; flex-direction: column; gap: 10px;
+		}
+		.player-badge { background: rgba(255,255,255,0.2); padding: 5px 15px; border-radius: 20px; font-weight: bold; backdrop-filter: blur(5px); }
 		.corner-link {
 			position: absolute;
 			color: #1f2430;
@@ -26,6 +45,49 @@
 		#editor-link { bottom: 12px; right: 12px; }
 		#github-link { top: 12px; right: 12px; padding: 8px; line-height: 0; }
 		#github-link svg { display: block; width: 20px; height: 20px; }
+
+		/* Main Menu Styles */
+		#main-menu {
+			position: absolute; inset: 0; z-index: 200;
+			display: flex; flex-direction: column; align-items: center; justify-content: center;
+			background: radial-gradient(circle at center, rgba(30,30,40,0.6) 0%, rgba(10,10,15,0.95) 100%);
+			backdrop-filter: blur(15px);
+		}
+		#main-menu h1 {
+			color: white; font-size: 64px; font-weight: 800; margin-bottom: 50px;
+			text-transform: uppercase; letter-spacing: 4px;
+			text-shadow: 0 0 20px rgba(255,255,255,0.5);
+		}
+		.menu-btn {
+			background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+			color: white; font-size: 20px; font-weight: 600; padding: 20px 40px;
+			border-radius: 12px; margin: 10px; cursor: pointer; transition: all 0.3s ease;
+			width: 320px; display: flex; align-items: center; justify-content: center; gap: 15px;
+			box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+		}
+		.menu-btn:hover {
+			background: rgba(255,255,255,0.2); transform: translateY(-3px);
+			box-shadow: 0 8px 25px rgba(0,255,100,0.3); border-color: rgba(0,255,100,0.5);
+		}
+		
+		/* Camera Mode UI */
+		#camera-ui {
+			position: absolute; inset: 0; pointer-events: none; z-index: 100; display: none;
+		}
+		#webcam-container {
+			position: absolute; bottom: 20px; right: 20px;
+			width: 240px; height: 180px; border-radius: 12px; overflow: hidden;
+			border: 2px solid rgba(255,255,255,0.2); box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+			background: rgba(0,0,0,0.5); backdrop-filter: blur(5px);
+		}
+		#webcam-feed { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+		#steering-container {
+			position: absolute; bottom: 30px; left: 30px;
+			width: 200px; height: 200px; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.5));
+		}
+		#volante-svg { width: 100%; height: 100%; transition: transform 0.1s linear; }
+		.indicator { transition: fill 0.2s, filter 0.2s; opacity: 0; }
+		.indicator.active { fill: #22c55e; filter: drop-shadow(0 0 10px #22c55e); opacity: 1; }
 	</style>
 	<script type="importmap">
 	{
@@ -36,11 +98,56 @@
 		}
 	}
 	</script>
+	<!-- MediaPipe Scripts -->
+	<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+	<script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+	<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+	<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 </head>
 <body>
-	<a id="github-link" class="corner-link" href="https://github.com/mrdoob/Starter-Kit-Racing" aria-label="View source on GitHub">
-		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56v-2.05c-3.2.7-3.88-1.36-3.88-1.36-.52-1.34-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.55-.29-5.23-1.28-5.23-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.18 1.18.92-.26 1.91-.39 2.89-.39.98 0 1.97.13 2.89.39 2.21-1.5 3.18-1.18 3.18-1.18.62 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.06.78 2.13v3.16c0 .31.21.67.79.56C20.21 21.39 23.5 17.07 23.5 12 23.5 5.65 18.35.5 12 .5z"/></svg>
-	</a>
+	<div id="main-menu">
+		<h1>Racing</h1>
+		<button class="menu-btn" id="btn-server">
+			<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+			Jugar en Servidor
+		</button>
+		<button class="menu-btn" id="btn-camera">
+			<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+			Jugar con Cámara
+		</button>
+	</div>
+
+	<div id="camera-ui">
+		<div id="webcam-container">
+			<video id="webcam-feed" autoplay playsinline></video>
+		</div>
+		<div id="steering-container">
+			<svg id="volante-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 440 440.11">
+				<defs>
+					<filter id="b" x="0" y="-8477.27" width="440" height="32766" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feColorMatrix values="-1 0 0 0 1 0 -1 0 0 1 0 0 -1 0 1 0 0 0 1 0" result="invert"/><feFlood flood-color="#fff" result="bg"/><feBlend in="invert" in2="bg"/></filter>
+					<mask id="a" x="0" y="-8477.27" width="440" height="32766" maskUnits="userSpaceOnUse"><g style="filter:url(#b)"/></mask>
+				</defs>
+				<g style="mask:url(#a)">
+					<path d="M359,248.87a11.54,11.54,0,0,0,.72-1.7,140.92,140.92,0,0,0-3.17-67.2,8.23,8.23,0,0,0-3.81-4.73c-13.4-6.25-26.59-13.18-40.49-18.08C276.31,144.48,239,140.75,201,143c-39.89,2.41-77.91,11.84-112.89,31.77A11.56,11.56,0,0,0,83.21,181a139.62,139.62,0,0,0-5.06,51.91c.47,5.38,1.59,10.7,2.41,16.13,66.41-17.93,120,46.79,94.4,106.1,30.11,9.82,60,9.75,90.16.06C239.58,295.65,293,231.27,359,248.87ZM74.73,55.12l36.49,36.57c31.44-25.94,67.72-39.78,109-39.76s77.5,14,108.59,39.71l36.61-36.39C284.87-17.91,156.83-18.88,74.73,55.12ZM55.39,365.59l36.31-36.3C38.25,266.75,38.75,172.85,91.59,111L55.42,74.59C-17.69,154.09-19.25,283.83,55.39,365.59Zm293.5-255.13q79.44,109.8-.08,219.29c11.76,11.82,23.72,23.86,35.69,35.88,72-77.84,75.95-207.61.17-291.11ZM329,348.34c-31.37,25.93-67.62,39.87-108.89,39.88s-77.76-14-109.09-39.9L74.5,384.58c77.63,71.84,207.55,76.12,291,.22ZM262.91,220.09A42.89,42.89,0,1,1,220,177.2,42.9,42.9,0,0,1,262.91,220.09Z" style="fill:#fff"/>
+				</g>
+				<!-- Add colored indicators for the quadrants where they grab the wheel -->
+				<circle id="indicator-top" class="indicator" cx="220" cy="50" r="30" fill="rgba(255,255,255,0.2)" />
+				<circle id="indicator-right" class="indicator" cx="390" cy="220" r="30" fill="rgba(255,255,255,0.2)" />
+				<circle id="indicator-bottom" class="indicator" cx="220" cy="390" r="30" fill="rgba(255,255,255,0.2)" />
+				<circle id="indicator-left" class="indicator" cx="50" cy="220" r="30" fill="rgba(255,255,255,0.2)" />
+			</svg>
+		</div>
+	</div>
+
+	<button id="qr-toggle-btn">Mostrar QR</button>
+	<div id="qr-overlay">
+		<h2>SALA: <span id="room-code-text">----</span></h2>
+		<img id="qr-img" src="" alt="QR">
+		<p style="margin-top: 10px; font-size: 14px;">Escanea para jugar</p>
+	</div>
+	<div class="players-list" id="players-list"></div>
+	<div id="hostDebugLog" style="position: absolute; bottom: 20px; left: 20px; background: rgba(0,0,0,0.8); color: #fff; font-family: monospace; font-size: 10px; max-height: 120px; width: 300px; overflow-y: auto; pointer-events: none; z-index: 9999; padding: 5px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.2); display: none;">Host Debug:</div>
+
 	<a id="editor-link" class="corner-link" href="editor.html">Create new track</a>
 	<script>
 		const map = new URLSearchParams( location.search ).get( 'map' );
@@ -48,6 +155,250 @@
 			const link = document.getElementById( 'editor-link' );
 			link.href = 'editor.html?map=' + map;
 			link.textContent = 'Edit this track';
+		}
+	</script>
+
+	<script>
+		window.playerInputs = {};
+		window.players = {}; // id -> color
+
+		// --- SERVER MODE ---
+		document.getElementById('btn-server').addEventListener('click', () => {
+			document.getElementById('main-menu').style.display = 'none';
+			
+			const script = document.createElement('script');
+			script.src = '/socket.io/socket.io.js';
+			script.onload = () => {
+				const logEl = document.getElementById('hostDebugLog');
+				const hostLog = (msg) => {
+					if (logEl) {
+						logEl.innerHTML += '<br>' + msg;
+						logEl.scrollTop = logEl.scrollHeight;
+					}
+					console.log(msg);
+				};
+				hostLog('Iniciando Socket.io host...');
+
+				window.socket = io();
+				window.socket.on('connect', () => {
+					hostLog('Conectado al servidor. Emitiendo createRoom...');
+					window.socket.emit('createRoom');
+				});
+
+				window.socket.on('roomCreated', (data) => {
+					const code = data.code || data;
+					hostLog('Sala creada con código: ' + code);
+					document.getElementById('room-code-text').innerText = code;
+					if (data.qr) document.getElementById('qr-img').src = data.qr;
+					
+					const qrToggle = document.getElementById('qr-toggle-btn');
+					qrToggle.style.display = 'block';
+					qrToggle.onclick = () => {
+						const overlay = document.getElementById('qr-overlay');
+						if (overlay.style.display === 'flex') {
+							overlay.style.display = 'none';
+							qrToggle.innerText = 'Mostrar QR';
+						} else {
+							overlay.style.display = 'flex';
+							qrToggle.innerText = 'Ocultar QR';
+						}
+					};
+				});
+
+				window.socket.on('playerJoined', (info) => {
+					hostLog('Jugador unido: ' + info.id + ' (Color: ' + info.color + ')');
+					window.players[info.id] = info.color;
+					window.playerInputs[info.id] = { x: 0, z: 0, touchActive: false, raw: {} };
+					
+					const badge = document.createElement('div');
+					badge.className = 'player-badge';
+					badge.style.borderLeft = `5px solid ${info.color}`;
+					badge.innerText = info.name || 'Jugador Conectado';
+					badge.id = `badge-${info.id}`;
+					document.getElementById('players-list').appendChild(badge);
+
+					if (window.addPlayerToGame) {
+						hostLog('Añadiendo jugador al juego 3D: ' + info.id);
+						window.addPlayerToGame(info.id, info.color);
+					} else {
+						hostLog('Error: window.addPlayerToGame no está definido aún.');
+					}
+				});
+
+				window.socket.on('playerCommand', (data) => {
+					if (!window.playerInputs[data.id]) {
+						hostLog('Comando recibido para jugador desconocido: ' + data.id);
+						return;
+					}
+					const inputs = window.playerInputs[data.id];
+					inputs.raw[data.action] = data.state;
+					
+					inputs.z = (inputs.raw.accelerate ? 1 : 0) - (inputs.raw.brake ? 1 : 0);
+					inputs.x = (inputs.raw.right ? 1 : 0) - (inputs.raw.left ? 1 : 0);
+					
+					hostLog('Cmd ' + data.id.substring(0, 4) + ': ' + data.action + '=' + data.state + ' | inputs.x=' + inputs.x + ' inputs.z=' + inputs.z);
+				});
+
+				window.socket.on('playerDisconnected', (id) => {
+					hostLog('Jugador desconectado: ' + id);
+					const badge = document.getElementById(`badge-${id}`);
+					if (badge) badge.remove();
+					if (window.removePlayerFromGame) window.removePlayerFromGame(id);
+					delete window.playerInputs[id];
+					delete window.players[id];
+				});
+			};
+			document.body.appendChild(script);
+		});
+
+		// --- CAMERA MODE ---
+		document.getElementById('btn-camera').addEventListener('click', () => {
+			document.getElementById('main-menu').style.display = 'none';
+			document.getElementById('camera-ui').style.display = 'block';
+
+			// Add local player
+			window.players['local'] = '#00ff00';
+			window.playerInputs['local'] = { x: 0, z: 0 };
+			// Delay a bit so the scene is ready
+			setTimeout(() => {
+			    if (window.addPlayerToGame) window.addPlayerToGame('local', '#00ff00');
+			}, 500);
+
+			initMediaPipe();
+		});
+
+		function initMediaPipe() {
+			const videoElement = document.getElementById('webcam-feed');
+			const volanteSvg = document.getElementById('volante-svg');
+			const indicators = {
+				top: document.getElementById('indicator-top'),
+				right: document.getElementById('indicator-right'),
+				bottom: document.getElementById('indicator-bottom'),
+				left: document.getElementById('indicator-left')
+			};
+
+			let isGrabbing = false;
+			let grabBaseAngle = 0;
+			let grabQuadrant = null;
+
+			function isHandClosed(landmarks) {
+				// Distance from wrist (0) to middle finger tip (12)
+				const dTip = Math.hypot(landmarks[12].x - landmarks[0].x, landmarks[12].y - landmarks[0].y);
+				// Distance from wrist (0) to middle finger base (9)
+				const dBase = Math.hypot(landmarks[9].x - landmarks[0].x, landmarks[9].y - landmarks[0].y);
+				// If tip is closer to wrist than base * 1.5, it's roughly closed
+				return dTip < dBase * 1.5;
+			}
+
+			function getHandAngle(landmarks) {
+				// Angle of the vector from wrist to middle finger base
+				return Math.atan2(landmarks[9].y - landmarks[0].y, landmarks[9].x - landmarks[0].x);
+			}
+
+			function updateIndicators(quadrant) {
+				Object.values(indicators).forEach(el => el.classList.remove('active'));
+				if (quadrant && indicators[quadrant]) {
+					indicators[quadrant].classList.add('active');
+				}
+			}
+
+			const hands = new Hands({locateFile: (file) => {
+				return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+			}});
+
+			hands.setOptions({
+				maxNumHands: 2,
+				modelComplexity: 0, // Reducido de 1 a 0 (modelo Lite, mucho más rápido)
+				minDetectionConfidence: 0.5,
+				minTrackingConfidence: 0.5
+			});
+
+			hands.onResults((results) => {
+				let inputs = { x: 0, z: 0 };
+				
+				if (results.multiHandLandmarks && results.multiHandedness) {
+					for (let i = 0; i < results.multiHandLandmarks.length; i++) {
+						const landmarks = results.multiHandLandmarks[i];
+						// MediaPipe handedness is flipped when using webcam facing user (selfie mode).
+						// So "Left" is actually the user's Right hand, and "Right" is Left.
+						const handLabel = results.multiHandedness[i].label; 
+						const isRightHand = handLabel === 'Left'; 
+						const isLeftHand = handLabel === 'Right';
+
+						const closed = isHandClosed(landmarks);
+
+						if (isRightHand) {
+							// Steering wheel hand
+							if (closed) {
+								const currentAngle = getHandAngle(landmarks);
+								if (!isGrabbing) {
+									isGrabbing = true;
+									grabBaseAngle = currentAngle;
+									
+									// Determine quadrant based on initial angle
+									let angleDeg = currentAngle * 180 / Math.PI;
+									// Note: Y goes down, so angles are: 0 is Right, 90 is Down, 180 is Left, -90 is Up
+									if (angleDeg < -135 || angleDeg > 135) grabQuadrant = 'left';
+									else if (angleDeg >= -135 && angleDeg < -45) grabQuadrant = 'top';
+									else if (angleDeg >= -45 && angleDeg < 45) grabQuadrant = 'right';
+									else grabQuadrant = 'bottom';
+									
+									updateIndicators(grabQuadrant);
+								}
+
+								// Calculate rotation difference
+								let diff = currentAngle - grabBaseAngle;
+								// Normalize difference to -PI to PI
+								if (diff > Math.PI) diff -= Math.PI * 2;
+								if (diff < -Math.PI) diff += Math.PI * 2;
+
+								// Map to steering (-1 to 1). Let's say 90 degrees (PI/2) is full turn.
+								let steering = diff / (Math.PI / 2);
+								steering = Math.max(-1, Math.min(1, steering));
+								
+								// Apply to input (adjust sign based on testing, usually positive x is right)
+								inputs.x = -steering;
+
+								// Rotate SVG visually
+								const visualRotation = steering * 90;
+								volanteSvg.style.transform = `rotate(${visualRotation}deg)`;
+							} else {
+								if (isGrabbing) {
+									isGrabbing = false;
+									updateIndicators(null);
+									volanteSvg.style.transform = `rotate(0deg)`;
+								}
+							}
+						}
+
+						if (isLeftHand) {
+							// Acceleration hand
+							if (closed) {
+								inputs.z = -1; // Brake
+							} else {
+								inputs.z = 1; // Accelerate
+							}
+						}
+					}
+				}
+
+				if (!isGrabbing) {
+					// Auto-center steering if not grabbing
+					inputs.x = 0;
+					volanteSvg.style.transform = `rotate(0deg)`;
+				}
+
+				window.playerInputs['local'] = inputs;
+			});
+
+			const camera = new Camera(videoElement, {
+				onFrame: async () => {
+					await hands.send({image: videoElement});
+				},
+				width: 320,  // Reducido de 640 para mejorar FPS
+				height: 240  // Reducido de 480 para mejorar FPS
+			});
+			camera.start();
 		}
 	</script>
 	<script type="module" src="js/main.js"></script>

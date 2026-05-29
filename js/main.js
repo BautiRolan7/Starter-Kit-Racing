@@ -200,28 +200,50 @@ async function init() {
 		restitution: 0.0,
 	} );
 
-	const sphereBody = createSphereBody( world, spawn ? spawn.position : null );
+	const vehicles = {};
+	let mainVehicle = null;
 
-	const vehicle = new Vehicle();
-	vehicle.rigidBody = sphereBody;
-	vehicle.physicsWorld = world;
+	window.addPlayerToGame = (id, color) => {
+		const sb = createSphereBody( world, spawn ? spawn.position : null );
+		const v = new Vehicle();
+		v.rigidBody = sb;
+		v.physicsWorld = world;
+		if ( spawn ) {
+			const [ sx, sy, sz ] = spawn.position;
+			const offset = Object.keys(vehicles).length * 2;
+			v.spherePos.set( sx + offset, sy, sz );
+			v.prevModelPos.set( sx + offset, 0, sz );
+			v.container.rotation.y = spawn.angle;
+		}
 
-	if ( spawn ) {
+		const colorToModelMap = {
+			'#fbbf24': 'vehicle-truck-yellow',
+			'#22c55e': 'vehicle-truck-green',
+			'#a855f7': 'vehicle-truck-purple',
+			'#ef4444': 'vehicle-truck-red'
+		};
+		const m = colorToModelMap[color] || 'vehicle-truck-yellow';
+		const vg = v.init( models[ m ] );
+		scene.add( vg );
+		
+		const vCam = new Camera();
+		vehicles[id] = { vehicle: v, group: vg, body: sb, camera: vCam };
 
-		const [ sx, sy, sz ] = spawn.position;
-		vehicle.spherePos.set( sx, sy, sz );
-		vehicle.prevModelPos.set( sx, 0, sz );
-		vehicle.container.rotation.y = spawn.angle;
+		if (!mainVehicle) mainVehicle = v;
+	};
 
-	}
+	window.removePlayerFromGame = (id) => {
+		if (vehicles[id]) {
+			scene.remove(vehicles[id].group);
+			delete vehicles[id];
+			if (mainVehicle === vehicles[id]?.vehicle) {
+				const keys = Object.keys(vehicles);
+				mainVehicle = keys.length > 0 ? vehicles[keys[0]].vehicle : null;
+			}
+		}
+	};
 
-	const vehicleGroup = vehicle.init( models[ 'vehicle-truck-yellow' ] );
-	scene.add( vehicleGroup );
-
-	dirLight.target = vehicleGroup;
-
-	const cam = new Camera();
-	scene.add( cam.debug );
+	const defaultCam = new Camera();
 
 	const controls = new Controls();
 
@@ -229,7 +251,7 @@ async function init() {
 	const driftMarks = new DriftMarks( scene, mapParam );
 
 	const audio = new GameAudio();
-	audio.init( cam.camera );
+	audio.init( defaultCam.camera );
 
 	const lapTimer = new LapTimer( customCells, mapParam );
 
@@ -239,13 +261,20 @@ async function init() {
 	const contactListener = {
 		onContactAdded( bodyA, bodyB ) {
 
-			if ( bodyA !== sphereBody && bodyB !== sphereBody ) return;
+			let involvedVehicle = null;
+			for (const id in vehicles) {
+				if (bodyA === vehicles[id].body || bodyB === vehicles[id].body) {
+					involvedVehicle = vehicles[id].vehicle;
+					break;
+				}
+			}
+			if (!involvedVehicle) return;
 
-			_forward.set( 0, 0, 1 ).applyQuaternion( vehicle.container.quaternion );
+			_forward.set( 0, 0, 1 ).applyQuaternion( involvedVehicle.container.quaternion );
 			_forward.y = 0;
 			_forward.normalize();
 
-			const impactVelocity = Math.abs( vehicle.modelVelocity.dot( _forward ) );
+			const impactVelocity = Math.abs( involvedVehicle.modelVelocity.dot( _forward ) );
 			audio.playImpact( impactVelocity );
 
 		}
@@ -264,25 +293,74 @@ async function init() {
 
 		updateWorld( world, contactListener, dt );
 
-		vehicle.update( dt, input );
+		for (const id in vehicles) {
+			const v = vehicles[id].vehicle;
+			const pInput = (window.playerInputs && window.playerInputs[id]) ? window.playerInputs[id] : { x: 0, z: 0 };
+			v.update(dt, pInput);
+		}
 
-		dirLight.position.set(
-			vehicle.spherePos.x + 11.4,
-			15,
-			vehicle.spherePos.z - 5.3
-		);
+		if (mainVehicle) {
+			dirLight.position.set( mainVehicle.spherePos.x + 11.4, 15, mainVehicle.spherePos.z - 5.3 );
+			dirLight.target = vehicles[Object.keys(vehicles)[0]].group;
 
-		const mv = vehicle.modelVelocity;
-		_camLead.set( 0, 0, 1 ).applyQuaternion( vehicle.container.quaternion ).multiplyScalar( Math.sqrt( mv.x * mv.x + mv.z * mv.z ) );
-		cam.update( dt, vehicle.spherePos, _camLead );
-		particles.update( dt, vehicle );
-		driftMarks.update( dt, vehicle );
-		audio.update( dt, vehicle.linearSpeed / MAX_SPEED, input.z, vehicle.driftIntensity );
+			particles.update( dt, mainVehicle );
+			driftMarks.update( dt, mainVehicle );
+			
+			const firstId = Object.keys(vehicles)[0];
+			const pInputZ = firstId && window.playerInputs[firstId] ? window.playerInputs[firstId].z : 0;
+			audio.update( dt, mainVehicle.linearSpeed / MAX_SPEED, pInputZ, mainVehicle.driftIntensity );
 
-		const hasInput = input.touchActive || Math.abs( input.x ) > 0.05 || Math.abs( input.z ) > 0.05;
-		lapTimer.update( dt, vehicle.spherePos, hasInput );
+			lapTimer.update( dt, mainVehicle.spherePos, true );
+		}
 
-		renderer.render( scene, cam.camera );
+		const playerIds = Object.keys(vehicles);
+		const playerCount = playerIds.length;
+
+		if (playerCount === 0) {
+			renderer.setScissorTest(false);
+			renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
+			renderer.render(scene, defaultCam.camera);
+		} else {
+			renderer.setScissorTest(true);
+			playerIds.forEach((id, index) => {
+				const pInfo = vehicles[id];
+				const v = pInfo.vehicle;
+				const vCam = pInfo.camera;
+
+				const mv = v.modelVelocity;
+				_camLead.set( 0, 0, 1 ).applyQuaternion( v.container.quaternion ).multiplyScalar( Math.sqrt( mv.x * mv.x + mv.z * mv.z ) );
+				vCam.update( dt, v.spherePos, _camLead );
+
+				if (index === 0) {
+					defaultCam.camera.position.copy(vCam.camera.position);
+					defaultCam.camera.quaternion.copy(vCam.camera.quaternion);
+				}
+
+				const w = window.innerWidth;
+				const h = window.innerHeight;
+				let vx, vy, vw, vh;
+
+				if (playerCount === 1) {
+					vx = 0; vy = 0; vw = w; vh = h;
+				} else if (playerCount === 2) {
+					vw = Math.floor(w / 2); vh = h;
+					vx = index === 0 ? 0 : vw;
+					vy = 0;
+				} else {
+					vw = Math.floor(w / 2); vh = Math.floor(h / 2);
+					vx = (index % 2) === 0 ? 0 : vw;
+					vy = index < 2 ? vh : 0;
+				}
+
+				renderer.setViewport(vx, vy, vw, vh);
+				renderer.setScissor(vx, vy, vw, vh);
+				vCam.camera.aspect = vw / vh;
+				vCam.camera.updateProjectionMatrix();
+
+				renderer.render(scene, vCam.camera);
+			});
+			renderer.setScissorTest(false);
+		}
 
 	}
 

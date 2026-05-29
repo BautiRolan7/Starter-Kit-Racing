@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mando Remoto</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="client-body">
+    
+    <!-- Pantalla de Login -->
+    <div id="loginScreen" class="screen active">
+        <h2>Unirse a la partida</h2>
+        <input type="text" id="playerNameInput" placeholder="TU NOMBRE" maxlength="12" autocomplete="off">
+        <input type="text" id="roomCodeInput" placeholder="CÓDIGO (Ej: ABCD)" maxlength="4" autocomplete="off">
+        <button id="joinBtn">Conectar</button>
+        <p id="errorMsg" class="error"></p>
+    </div>
+
+    <!-- Pantalla del Mando -->
+    <div id="controllerScreen" class="screen">
+        <div class="top-bar">
+            <div class="controller-status">
+                Sala: <strong id="currentRoomDisplay"></strong>
+            </div>
+        </div>
+        
+        <div id="gamepadContainer" class="dpad-container horizontal">
+            <div class="steering">
+                <button class="dpad-btn left duo-btn" data-action="left">◀</button>
+                <button class="dpad-btn right duo-btn" data-action="right">▶</button>
+            </div>
+            <div class="action-buttons">
+                <button class="action-btn brake duo-btn" data-action="brake"></button>
+                <button class="action-btn accelerate duo-btn" data-action="accelerate"></button>
+            </div>
+        </div>
+    </div>
+
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="client.js"></script>
+</body>
+</html>
